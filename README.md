@@ -9,17 +9,16 @@ Automated sports analysis relies heavily on robust multi-object tracking (MOT) t
 This project requires the SAM2 environment. Follow the official instructions to clone and install the base model:
 
 ```bash
-git clone [https://github.com/facebookresearch/segment-anything-2.git](https://github.com/facebookresearch/segment-anything-2.git)
+git clone https://github.com/facebookresearch/sam2.git
 cd sam2
 pip install -e .
 ```
 
 ### 2. Download SAM2 Checkpoints
 
-2. Download SAM2 Checkpoints
 Download the SAM2 checkpoints (e.g., sam2.1_hiera_large.pt) from the official SAM2 repository and place them in the checkpoints/ directory.
 
-3. Add SAMIDARE Scripts
+### 3. Add SAMIDARE Scripts
 Copy the following three files from this repository into the SAM2 root directory:
 ```bash
 samidare_for_vis.py (For visualization)
