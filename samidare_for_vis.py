@@ -1304,7 +1304,7 @@ if __name__ == "__main__":
     parser.add_argument("--tau_r", type=float, default=8.0, help="Reliable threshold for track state (default: 8.0)")
     parser.add_argument("--tau_p", type=float, default=1.0, help="Pending threshold for track state (default: 1.0)")
     parser.add_argument("--tau_s", type=float, default=0.0, help="Suspicious threshold for track state (default: 0.0)")
-    parser.add_argument("--density_threshold", type=float, default=1.5, help="Density threshold above which reconstruction is skipped")
+    parser.add_argument("--density_threshold", type=float, default=2.0, help="Density threshold above which reconstruction is skipped")
     parser.add_argument("--second_stage_iou_threshold", type=float, default=0.0, 
                         help="IoU threshold for 2nd stage matching with prev_bbox (default: 0.0)")  # 🆕
     parser.add_argument("--frame_out_d_thre", type=float, default=0.6, help="Density threshold for clasiffication of dense trakck")
