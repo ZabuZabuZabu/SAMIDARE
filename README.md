@@ -28,7 +28,7 @@ experiment.sh (For automated testing)
 
 ## 🏃 Execution
 ### 1. Data Preparation
-Download the dataset and detection results (e.g., SportsMOT) from the provided Google Drive link.
+Download the dataset and detection results (e.g., SportsMOT) from the Google Drive link (https://drive.google.com/drive/folders/1KRYiCUdtT0IA4YxhXC16S350W2FqR2og?usp=sharing).
 
 Place the data in your workspace.
 
