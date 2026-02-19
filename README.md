@@ -53,8 +53,8 @@ ROOT
 |   |   |
 |   |   |--img1
 |   |       |--000001.jpg
-|   |
 |   |             :
+|   |             
 |   |--your_own_data
 |       |--det
 |       |   |--det.txt
