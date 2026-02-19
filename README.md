@@ -23,11 +23,15 @@ Copy the following files from this repository into the SAM2 root directory:
 ```bash
 samidare_for_vis.py
 ```
-### 3. Download YOLOX Checkpoints
+### 3. Setup for Detector
 
 Download the checkpoints (e.g., sam2.1_hiera_large.pt) from the following Google Drive (https://drive.google.com/drive/folders/1KRYiCUdtT0IA4YxhXC16S350W2FqR2og?usp=sharing)
+and place it in /yolox/checkpoints.
 
-and place it in /yolox/checkpoints
+Install the requirements.
+```bash
+pip install -r requirements.txt
+```
 
 ## 🏃 Demo
 ### 1. Data Preparation
