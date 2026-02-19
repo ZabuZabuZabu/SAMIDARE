@@ -16,38 +16,29 @@ pip install -e .
 
 ### 2. Download SAM2 Checkpoints
 
-Download the SAM2 checkpoints (e.g., sam2.1_hiera_large.pt) from the official SAM2 repository and place them in the checkpoints/ directory.
+Download the SAM2 checkpoints (e.g., sam2.1_hiera_large.pt) from the official SAM2 repository and place them in /sam2/checkpoints.
 
 ### 3. Add SAMIDARE Scripts
-Copy the following three files from this repository into the SAM2 root directory:
+Copy the following files from this repository into the SAM2 root directory:
 ```bash
-samidare_for_vis.py (For visualization)
-samidare_for_test.py (For text output and testing)
-experiment.sh (For automated testing)
+samidare_for_vis.py
 ```
+### 3. Download YOLOX Checkpoints
 
-## 🏃 Execution
+Download the checkpoints (e.g., sam2.1_hiera_large.pt) from the following Google Drive (https://drive.google.com/drive/folders/1KRYiCUdtT0IA4YxhXC16S350W2FqR2og?usp=sharing)
+
+and place it in /yolox/checkpoints
+
+## 🏃 Demo
 ### 1. Data Preparation
-Download the dataset and detection results (e.g., SportsMOT) from the Google Drive link (https://drive.google.com/drive/folders/1KRYiCUdtT0IA4YxhXC16S350W2FqR2og?usp=sharing).
-
-Place the data in your workspace.
-
-### 2. Configuration
-Adjust the paths in the scripts to match your local environment:
+you can use our demo data which we have already put in our repository, but if you want to run with your own video, please run under code
 
 ```bash
---video_path: Path to the video sequence (containing img1/ and gt/gt.txt).
---output_dir: Directory to save tracking results and videos.
+python detection.py --video "path_to_your_mp4_file"
 ```
 
-### 3. Running the Scripts
-To run individual tracking with visualization:
-
+### 2. Running the Scripts
+Run under code. If you run with your own data, please change --data_path
 ```bash
-python samidare_for_vis.py --video_path /path/to/data --output_video result.mp4
-```
-
-To run the automated test suite:
-```bash
-bash experiment.sh
+python samidare_for_vis.py --output_dir "path_to_your_output_directory" --data_path /detection/demo_data
 ```

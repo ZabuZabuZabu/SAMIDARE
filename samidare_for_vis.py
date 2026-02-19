@@ -1291,7 +1291,7 @@ def demo_sam2mot_with_gt(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu", type=int, default=0, help="GPU ID to use")
-    parser.add_argument("--video_path", type=str, 
+    parser.add_argument("--data_path", type=str, 
                         default="/home-local/zabu/det_val2/v_00HRwkvvjtQ_c005",
                         help="Path to video directory (containing img1/ and gt/)")
     parser.add_argument("--output_video", type=str, default="tracking_output.mp4", help="Output video filename")

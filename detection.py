@@ -35,7 +35,7 @@ def make_parser():
         help="directory to save the MOT formatted results"
     )
 
-    parser.add_argument("-f", "--exp_file", default="/home/zabu/masa/yolox/yolox_x_ch_sportsmot.py", type=str)
+    parser.add_argument("-f", "--exp_file", default="/yolox/yolox_x_ch_sportsmot.py", type=str)
     parser.add_argument("-c", "--ckpt", default=None, type=str, help="ckpt for eval")
     parser.add_argument("--device", default="cuda:0", type=str)
     parser.add_argument("--conf", default=None, type=float, help="test conf")
@@ -165,7 +165,7 @@ def main(exp, args):
     model.eval()
 
     if not args.ckpt:
-        ckpt_file = "/home/zabu/masa/yolox/checkpoints/yolox_x_sports_mix.pth.tar"
+        ckpt_file = "/yolox/checkpoints/yolox_x_sports_mix.pth.tar"
     else:
         ckpt_file = args.ckpt
 
