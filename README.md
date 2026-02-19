@@ -38,7 +38,39 @@ python detection.py --video "path_to_your_mp4_file"
 ```
 
 ### 2. Running the Scripts
+Before you run the scripts, please check if your directory structure is as follows:
+```bash
+ROOT
+|--sam2
+|   |--sam2
+|   |   :
+|   |--samidare_for_vis.py
+|
+|--detection
+|   |--demo_data
+|   |   |--det
+|   |   |   |--det.txt
+|   |   |
+|   |   |--img1
+|   |       |--000001.jpg
+|   |
+|   |             :
+|   |--your_own_data
+|       |--det
+|       |   |--det.txt
+|       |
+|       |--img1
+|           |--000001.jpg
+|                 :
+|
+|--yolox
+|--detection.py
+|--requirement.txt
+|--your_own_video.mp4
+```
+
 Run under code. If you run with your own data, please change --data_path
 ```bash
+cd sam2
 python samidare_for_vis.py --output_dir "path_to_your_output_directory" --data_path /detection/demo_data
 ```
