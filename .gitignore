@@ -5,3 +5,6 @@ sam2/
 SportsMOT/
 sportsmot_publish/
 SportsMOT.zip
+outputs/
+experiment.sh
+samidare_for_test.py
