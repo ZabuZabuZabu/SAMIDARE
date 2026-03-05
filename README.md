@@ -1,4 +1,4 @@
-# SAMIDARE: Advanced Tracking-by-Segmentation method for dence environment
+# SAMIDARE: Advanced Tracking-by-Segmentation for dence environment
 
 ## 📝 Abstract
 Automated sports analysis demands robust multi-object tracking (MOT), yet segmentation-based methods often struggle with mask errors and ID switches in dense scenes. We propose SAMIDARE, a framework that enhances SAM2MOT for congested scenarios through two key components: (1) adaptive mask control, integrating density-aware mask re-generation and selective memory updates to preserve feature integrity; and (2) state-aware association and new track initialization, which improves robustness under occlusions and frequent frame-out events. Evaluated on SportsMOT, SAMIDARE achieves state-of-the-art performance, outperforming the baseline by 2.5 HOTA and 4.2 IDF1 points on the validation set. These results demonstrate that adaptive feature management and state-aware association provide a robust and efficient solution for dense sports tracking.
