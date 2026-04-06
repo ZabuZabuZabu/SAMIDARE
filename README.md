@@ -6,7 +6,7 @@ Automated sports analysis demands robust multi-object tracking (MOT), yet segmen
 ## 🛠 Setup & Installation
 
 ### 1. Clone SAM2 Repository
-This project requires the SAM2 environment. Follow the official instructions to clone and install the base model:
+This project requires the SAM2 environment. Follow the official instructions(https://github.com/facebookresearch/sam2?tab=readme-ov-file) to clone and install the base model:
 
 ```bash
 git clone https://github.com/facebookresearch/sam2.git

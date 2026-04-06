@@ -45,7 +45,7 @@ class Track:
     init_frame: int
     skip_memory_current: bool = False
     memory_window: int = 7
-    prev_bbox: Optional[np.ndarray] = None 
+    prev_bbox: Optional[np.ndarray] = None
     is_dense: bool = False
     last_matched_frame: Optional[int] = None
     last_matched_bbox: Optional[np.ndarray] = None
@@ -95,7 +95,8 @@ class GTLoader:
         return self.gt_data.get(frame_id, [])
 
 class TrajectoryManagerSystem:
-   
+    """論文のTrajectory Manager Systemの実装"""
+    
     def __init__(self, 
                  tau_r: float = 8,
                  tau_p: float = 1,
@@ -109,7 +110,7 @@ class TrajectoryManagerSystem:
         self.untracked_ratio_threshold = untracked_ratio_threshold
     
     def classify_track_state(self, logits_score: float) -> str:
-        """Track state classification"""
+        """Equation 2: Track state classification"""
         if logits_score > self.tau_r:
             return TrackState.RELIABLE
         elif logits_score > self.tau_p:
@@ -120,7 +121,7 @@ class TrajectoryManagerSystem:
             return TrackState.LOST
     
     def compute_untracked_mask(self, frame_shape: Tuple[int, int], tracked_masks: List[np.ndarray]) -> np.ndarray:
-        """Compute untracked region mask"""
+        """Equation 1: Compute untracked region mask"""
         H, W = frame_shape
         untracked_mask = np.ones((H, W), dtype=np.uint8)
         
@@ -162,7 +163,7 @@ class TrajectoryManagerSystem:
         return True
 
 class CrossObjectInteraction:
-    """Cross-object Interaction Module"""
+    """Hybrid Cross-object Interaction Module"""
     
     def __init__(self, 
                  miou_threshold: float = 0.8, 
@@ -175,7 +176,7 @@ class CrossObjectInteraction:
         self.logits_margin = logits_margin
     
     def compute_mask_iou(self, mask1: np.ndarray, mask2: np.ndarray) -> float:
-        """Compute mask IoU"""
+        """Equation 3: Compute mask IoU"""
         if mask1 is None or mask2 is None:
             return 0.0
         
@@ -188,7 +189,7 @@ class CrossObjectInteraction:
         return float(intersection) / float(union)
     
     def compute_logits_variance(self, logits_history: deque) -> float:
-        """Compute logits score variance"""
+        """Equation 4: Compute logits score variance"""
         if len(logits_history) < 2:
             return 0.0
         
@@ -199,7 +200,7 @@ class CrossObjectInteraction:
         return variance
     
     def compute_logits_mean(self, logits_history: deque) -> float:
-        """Compute logits score mean"""
+        """Equation 4: Compute logits score mean"""
         if len(logits_history) < 2:
             return 0.0
         
@@ -207,6 +208,15 @@ class CrossObjectInteraction:
         mean_score = np.mean(scores)
         
         return mean_score
+
+    def compute_masd(self, logits_history: deque) -> float:
+
+        if len(logits_history) < 2:
+            return 0.0 
+        
+        scores = list(logits_history)[-self.variance_history:]
+        abs_diffs = np.abs(np.diff(scores))
+        return np.mean(abs_diffs)
 
     def detect_occlusion_and_resolve(self, tracks: List[Track], current_frame_idx: int) -> List[int]:
 
@@ -236,7 +246,6 @@ class CrossObjectInteraction:
 
                 diff_mean = abs(mean_a - mean_b)
                 diff_var = abs(var_a - var_b)          
-                diff_std = abs(std_a - std_b)  
 
                 if diff_mean >= diff_var:
                     occluded_idx = i if mean_a < mean_b else j
@@ -356,6 +365,30 @@ class SAM2MOT:
 
         return density
 
+    def compute_density_from_bbox(self, bbox: np.ndarray, all_detections: List[GTDetection]) -> float:
+        
+        x1, y1, x2, y2 = bbox
+        target_area = max((x2 - x1) * (y2 - y1), 1e-6)
+        density = 0.0
+
+        for other in all_detections:
+            ox1, oy1, ox2, oy2 = other.bbox
+
+            if np.allclose(other.bbox, bbox):
+                continue
+
+            inter_x1 = max(x1, ox1)
+            inter_y1 = max(y1, oy1)
+            inter_x2 = min(x2, ox2)
+            inter_y2 = min(y2, oy2)
+
+            inter_area = max(0, inter_x2 - inter_x1) * max(0, inter_y2 - inter_y1)
+
+            overlap_ratio = inter_area / target_area
+            density += overlap_ratio
+
+        return density
+
     def mask_to_bbox(self, mask: np.ndarray) -> np.ndarray:
         """Convert segmentation mask to bounding box"""
         coords = np.where(mask > 0)
@@ -388,9 +421,7 @@ class SAM2MOT:
             return False
 
     def hungarian_matching(self, gt_detections: List[GTDetection], tracks: List[Track], 
-                          use_prev_bbox: bool = False):
-        """Hungarian matching using both IoU and mean logit score"""
-
+                        use_last_match: bool = False):
         if len(gt_detections) == 0 or len(tracks) == 0:
             return [], list(range(len(gt_detections))), list(range(len(tracks)))
 
@@ -399,23 +430,25 @@ class SAM2MOT:
 
         for i, det in enumerate(gt_detections):
             for j, track in enumerate(tracks):
-                # 🆕 2段階目ではprev_bboxを使用
-                if use_prev_bbox and track.prev_bbox is not None:
-                    iou = self.compute_bbox_iou(det.bbox, track.prev_bbox)
-                else:
-                    iou = self.compute_bbox_iou(det.bbox, track.bbox)
+
+                target_bbox = track.last_matched_bbox if (use_last_match and track.last_matched_bbox is not None) else track.bbox
+                
+                iou = self.compute_bbox_iou(det.bbox, target_bbox)
 
                 if iou == 0:
                     cost_matrix[i, j] = 1.0
                     continue
 
-                if len(track.logits_history) > 0:
-                    mean_logit = np.mean(track.logits_history)
+                if use_last_match:
+                    cost_matrix[i, j] = 1.0 - iou
                 else:
-                    mean_logit = 0.0
+                    if len(track.logits_history) > 0:
+                        mean_logit = np.mean(track.logits_history)
+                    else:
+                        mean_logit = 0.0
 
-                norm_mean_logit = np.clip(mean_logit / 20.0, 0.0, 1.0)
-                cost_matrix[i, j] = (1 - iou) * self.cost_weight + (1 - norm_mean_logit) * (1 - self.cost_weight)
+                    norm_mean_logit = np.clip(mean_logit / 20.0, 0.0, 1.0)
+                    cost_matrix[i, j] = (1 - iou) * self.cost_weight + (1 - norm_mean_logit) * (1 - self.cost_weight)
 
         det_indices, track_indices = linear_sum_assignment(cost_matrix)
 
@@ -434,12 +467,11 @@ class SAM2MOT:
 
         return matches, unmatched_detections, unmatched_tracks
 
+
     def two_stage_matching(self, gt_detections: List[GTDetection], tracks: List[Track]):
-
-
         # === Stage 1 ===
         matches_stage1, unmatched_dets_stage1, unmatched_tracks_stage1 = self.hungarian_matching(
-            gt_detections, tracks, use_prev_bbox=False
+            gt_detections, tracks, use_last_match=False
         )
         
         if len(unmatched_tracks_stage1) == 0 or len(unmatched_dets_stage1) == 0:
@@ -448,19 +480,19 @@ class SAM2MOT:
         # === Stage 2 ===
         unmatched_tracks_objs = [tracks[i] for i in unmatched_tracks_stage1]
         unmatched_dets_objs = [gt_detections[i] for i in unmatched_dets_stage1]
-        
+
         valid_unmatched_tracks = []
         valid_track_indices = []
         for idx, track in zip(unmatched_tracks_stage1, unmatched_tracks_objs):
-            if track.prev_bbox is not None:
+            if track.last_matched_bbox is not None:
                 valid_unmatched_tracks.append(track)
                 valid_track_indices.append(idx)
         
         if len(valid_unmatched_tracks) == 0:
             return matches_stage1, unmatched_dets_stage1, unmatched_tracks_stage1, []
-        
+
         matches_stage2, unmatched_dets_stage2_local, unmatched_tracks_stage2_local = self.hungarian_matching(
-            unmatched_dets_objs, valid_unmatched_tracks, use_prev_bbox=True
+            unmatched_dets_objs, valid_unmatched_tracks, use_last_match=True
         )
         
         second_stage_matches = []
@@ -470,7 +502,8 @@ class SAM2MOT:
             
             det = gt_detections[original_det_idx]
             track = tracks[original_track_idx]
-            iou = self.compute_bbox_iou(det.bbox, track.prev_bbox)
+
+            iou = self.compute_bbox_iou(det.bbox, track.last_matched_bbox)
             
             if iou > self.second_stage_iou_threshold:
                 second_stage_matches.append((original_det_idx, original_track_idx))
@@ -484,58 +517,9 @@ class SAM2MOT:
         all_matches = matches_stage1 + second_stage_matches
         
         print(f"  📊 1st stage: {len(matches_stage1)} matches | "
-              f"2nd stage: {len(second_stage_matches)} matches (from prev_bbox)")
+            f"2nd stage: {len(second_stage_matches)} matches (from last_match)")
         
         return all_matches, final_unmatched_dets, final_unmatched_tracks, second_stage_matches
-
-    def frame_out_matching(self,
-                           frame_out_tracks: List[Track],
-                           frame_out_track_indices_in_active: List[int],
-                           gt_detections: List[GTDetection],
-                           unmatched_detections_indices: List[int],
-                           inference_state,
-                           frame_idx: int):
-        """Matching for frame-out tracks"""
-        matched_pairs = []
-        if len(frame_out_tracks) == 0 or len(unmatched_detections_indices) == 0:
-            return matched_pairs, unmatched_detections_indices
-
-        local_dets = [gt_detections[i] for i in unmatched_detections_indices]
-
-        from scipy.optimize import linear_sum_assignment
-        cost_matrix = np.ones((len(local_dets), len(frame_out_tracks)), dtype=float)
-
-        for i, det in enumerate(local_dets):
-            for j, track in enumerate(frame_out_tracks):
-                if track.last_matched_bbox is None:
-                    cost_matrix[i, j] = 1.0
-                    continue
-
-                iou = self.compute_bbox_iou(det.bbox, track.last_matched_bbox)
-                cost_matrix[i, j] = 1.0 - iou
-
-        det_indices, tr_indices = linear_sum_assignment(cost_matrix)
-
-        used_det_local = set()
-        used_track_local = set()
-        for di, tj in zip(det_indices, tr_indices):
-            if cost_matrix[di, tj] < 1.0:
-                original_det_idx = unmatched_detections_indices[di]
-                original_track_active_idx = frame_out_track_indices_in_active[tj]
-                matched_pairs.append((original_det_idx, original_track_active_idx))
-                used_det_local.add(original_det_idx)
-                used_track_local.add(original_track_active_idx)
-
-        remaining_unmatched = [d for d in unmatched_detections_indices if d not in used_det_local]
-
-        for det_idx, active_track_idx in matched_pairs:
-            det = gt_detections[det_idx]
-            track = None
-            for t in self.tracks:
-                if t.age >= 0 and t.id is not None:
-                    pass
-
-        return matched_pairs, remaining_unmatched
 
     def process_sam2_predictions(self, frame_idx: int, obj_ids: List[int], 
                                 masks: List[torch.Tensor]) -> Dict[int, Tuple[np.ndarray, float]]:
@@ -560,7 +544,6 @@ class SAM2MOT:
         return predictions
     
     def remove_occluded_frame_memory(self, inference_state, obj_id: int, frame_idx: int) -> bool:
-
         obj_idx = inference_state["obj_id_to_idx"].get(obj_id, None)
         if obj_idx is None:
             print(f"      ⚠️  Object {obj_id} not found in inference_state")
@@ -595,7 +578,6 @@ class SAM2MOT:
         return deleted
 
     def cleanup_old_memory(self, inference_state, current_frame_idx: int):
-
         if not hasattr(inference_state, 'output_dict'):
             return
 
@@ -637,8 +619,7 @@ class SAM2MOT:
         
         if frame_idx % 5 == 0:
             self.cleanup_old_memory(inference_state, frame_idx)
-        
-        # SAM2 prediction
+
         try:
             if self.propagation_iterator is not None:
                 try:
@@ -652,7 +633,6 @@ class SAM2MOT:
         for track in self.tracks:
             track.prev_bbox = track.bbox.copy() if track.bbox is not None else None
         
-        # update track 
         for track in self.tracks:
             track.age += 1
             obj_id = self.id_map.get(track.id, None)
@@ -686,10 +666,9 @@ class SAM2MOT:
 
                 tr.state = TrackState.FRAME_OUT
 
-                obj_id = self.id_map.get(tr.id) 
+                obj_id = self.id_map.get(tr.id)
                 if obj_id is not None:
                     self.remove_occluded_frame_memory(inference_state, obj_id, frame_idx)
-
                 tr.mask = None
 
                 frame_out_candidates.append(tr)
@@ -726,7 +705,6 @@ class SAM2MOT:
             detection = gt_detections[det_idx]
             track = active_tracks[active_track_idx]
 
-            # compute_density
             density = self.compute_density(detection, gt_detections)
             track.last_matched_density = density
             track.is_dense = density > self.frame_out_d_thre
@@ -755,7 +733,8 @@ class SAM2MOT:
                                 if deleted:
                                     coi_processed_track_ids.add(track.id)
                                     print(f"    🚫 Track {track.id}: Deleted occluded frame memory at frame {frame_idx}")
-                                    frame_debug_info["coi_ids"].append(track.id)#debag用
+                                    frame_debug_info["coi_ids"].append(track.id)
+                                    track.mask = None
                             track.skip_memory_current = False
         
         tracks_need_reconstruction = []
@@ -765,16 +744,24 @@ class SAM2MOT:
             track = active_tracks[active_track_idx]
 
             if (det_idx, active_track_idx) in second_stage_matches_in_active:
-                # if track.state == TrackState.PENDING:
-                tracks_need_reconstruction.append(
-                    (track, detection.bbox, "2nd-stage pending reconstruction")
-                )
-                print(f"    ✓ Track {track.id} scheduled for reconstruction (2nd-stage match)")
+                density = self.compute_density(detection, gt_detections)
+                if density >= self.density_threshold:
+                    print(f"    ⚠️ Track {track.id}: 2nd-stage Dense {density:.3f} ≥ {self.density_threshold} → Skip reconstruction")
+                    frame_debug_info["dense_skip"].append((track.id, density))
+                else:
+                    tracks_need_reconstruction.append(
+                        (track, detection.bbox, "2nd-stage pending reconstruction")
+                    )
+                    print(f"    ✓ Track {track.id} scheduled for reconstruction (2nd-stage match, bbox)")
 
                 matched_track_ids.add(track.id)
                 track.bbox = detection.bbox.copy()
                 track.last_seen_frame = frame_id
                 track.lost_frames = 0
+                track.last_matched_frame = frame_id
+                track.last_matched_bbox = detection.bbox.copy()
+                track.last_matched_density = density
+                track.is_dense = density > self.frame_out_d_thre
                 continue
 
             if track.mask is not None:
@@ -794,7 +781,7 @@ class SAM2MOT:
             if track.id in coi_processed_track_ids:
                 print(f"    ⚠️  Track {track.id}: Skipping Quality Reconstruction (already processed by CoI)")
                 continue
-            
+
             if self.trajectory_manager.should_reconstruct_quality(track, detection):
                 density = self.compute_density(detection, gt_detections)
 
@@ -804,13 +791,14 @@ class SAM2MOT:
                     continue
 
                 tracks_need_reconstruction.append((track, detection.bbox, "Quality reconstruction"))
-        
+
         for track in self.tracks:
             if track.id not in matched_track_ids:
                 track.lost_frames += 1
                 if track.lost_frames > self.trajectory_manager.tolerance_frames:
                     track.state = TrackState.LOST
 
+        # ===== Stege 3 ====
         if len(frame_out_candidates) > 0 and len(unmatched_detections) > 0:
             print(f"  🎯 Frame-Out matching: {len(frame_out_candidates)} candidates vs {len(unmatched_detections)} detections")
             
@@ -834,7 +822,7 @@ class SAM2MOT:
             used_det_local = set()
             
             for dloc, tloc in zip(det_idx_local, tr_idx_local):
-                if cost_matrix[dloc, tloc] < 1.0:  # IoU > 0
+                if cost_matrix[dloc, tloc] < 1.0:
                     orig_det_idx = unmatched_detections[dloc]
                     orig_active_track_idx = frame_out_candidate_indices[tloc]
                     iou = 1.0 - cost_matrix[dloc, tloc]
@@ -875,7 +863,6 @@ class SAM2MOT:
 
             unmatched_detections = [d for d in unmatched_detections if d not in used_det_local]
 
-        # Quality Reconstruction
         if tracks_need_reconstruction:
             for track, bbox, reason in tracks_need_reconstruction:
                 obj_id = self.id_map.get(track.id)
@@ -889,24 +876,58 @@ class SAM2MOT:
                         box=bbox.astype(np.float32)
                     )
                     track.state = TrackState.RELIABLE
+                    track.bbox = bbox.copy()
+                    track.last_seen_frame = frame_id
+                    track.lost_frames = 0
+                    track.last_matched_frame = frame_id
+                    track.last_matched_bbox = bbox.copy()
+                    track.last_matched_density = self.compute_density_from_bbox(bbox, gt_detections)
+                    track.is_dense = track.last_matched_density > self.frame_out_d_thre
+
                     reset_reasons.append(f"{reason}: Track {track.id}")
                     print(f"    ✓ Track {track.id} reconstructed ({reason})")
                     frame_debug_info["reconstructed_ids"].append(track.id)
             
             iterator_needs_reset = True
-        
-        # add new track
+
         if unmatched_detections:
             tracked_masks = [t.mask for t in self.tracks 
-                            if t.mask is not None and t.state != TrackState.LOST]
+                            if t.mask is not None 
+                            and isinstance(t.mask, np.ndarray)
+                            and np.any(t.mask)
+                            and t.state != TrackState.LOST]
             untracked_mask = self.trajectory_manager.compute_untracked_mask(
                 frame.shape[:2], tracked_masks
             )
-            
+
+            H, W = frame.shape[:2]
+            for t in active_tracks:
+                has_valid_mask = (t.mask is not None
+                                  and isinstance(t.mask, np.ndarray)
+                                  and np.any(t.mask))
+
+                if not has_valid_mask:
+                    guard_bbox = t.last_matched_bbox if t.last_matched_bbox is not None else t.bbox
+                    if guard_bbox is None:
+                        continue
+                    b = guard_bbox.astype(int)
+                    x1, y1 = max(0, b[0]), max(0, b[1])
+                    x2, y2 = min(W, b[2]), min(H, b[3])
+                    untracked_mask[y1:y2, x1:x2] = 0
+                    print(f"  [BBoxGuard] Track {t.id}: invalid-mask → guarded with last_matched_bbox {b}")
+
+                elif t.last_matched_bbox is not None:
+                    b = t.last_matched_bbox.astype(int)
+                    x1, y1 = max(0, b[0]), max(0, b[1])
+                    x2, y2 = min(W, b[2]), min(H, b[3])
+                    untracked_mask[y1:y2, x1:x2] = 0
+                    if t.is_dense:
+                        print(f"  [BBoxGuard] Track {t.id}: dense → also guarded last_matched_bbox {b}")
+
             num_added = 0
             for det_idx in unmatched_detections:
                 detection = gt_detections[det_idx]
-                
+                 
                 if self.trajectory_manager.should_add_detection(detection, untracked_mask):
                     new_track_id = self.next_track_id
                     if self.initialize_sam2_tracker(frame, detection.bbox, new_track_id, 
@@ -922,10 +943,10 @@ class SAM2MOT:
                             sam2_predictor=None, last_seen_frame=frame_id,
                             init_frame=frame_idx,
                             prev_bbox=None,
-                            last_matched_frame=frame_id,  
-                            last_matched_bbox=detection.bbox.copy(), 
-                            last_matched_density=density,  
-                            is_dense=is_dense  
+                            last_matched_frame=frame_id,
+                            last_matched_bbox=detection.bbox.copy(),
+                            last_matched_density=density,
+                            is_dense=is_dense
                         )
                         self.tracks.append(new_track)
                         self.id_map[new_track_id] = new_track_id
@@ -936,7 +957,6 @@ class SAM2MOT:
             if num_added > 0:
                 reset_reasons.append(f"New tracks added: {num_added}")
         
-        # remove lost track
         self.tracks = [t for t in self.tracks 
                     if not self.trajectory_manager.should_remove_track(t)]
         
@@ -1002,7 +1022,6 @@ class SAM2MOT:
             inference_state = None
 
             try:
-
                 inference_state = self.sam2_predictor.init_state(video_path=temp_video_path)
                 print("✓ SAM2 initialized")
 
@@ -1032,11 +1051,11 @@ class SAM2MOT:
                             state=TrackState.RELIABLE, lost_frames=0, age=1,
                             logits_history=deque(maxlen=25), sam2_predictor=None,
                             last_seen_frame=first_frame_id, init_frame=first_frame_idx,
-                            prev_bbox=None, 
-                            last_matched_frame=first_frame_id, 
-                            last_matched_bbox=detection.bbox.copy(), 
-                            last_matched_density=density, 
-                            is_dense=is_dense  
+                            prev_bbox=None,
+                            last_matched_frame=first_frame_id,
+                            last_matched_bbox=detection.bbox.copy(),
+                            last_matched_density=density,
+                            is_dense=is_dense
                         )
                         self.tracks.append(new_track)
                         self.id_map[track_id] = track_id
@@ -1129,12 +1148,11 @@ class SAM2MOT:
                 out.write(cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR))
             out.release()
             return temp_video_path
-    
+
     def visualize_frame(self, frame: np.ndarray, results: List[Dict], frame_id: int, frame_debug_info=None):
         """Visualize tracking results"""
         vis_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         
-        # Frame number
         frame_text = f"Frame: {frame_id}"
         cv2.putText(vis_frame, frame_text, (15, 35),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
@@ -1148,12 +1166,12 @@ class SAM2MOT:
             x1, y1, x2, y2 = map(int, bbox)
             cv2.rectangle(vis_frame, (x1, y1), (x2, y2), color, 2)
             
-            # confidence = result['confidence']
-            # text = f"ID:{track_id} S:{confidence:.2f}"
-            # (text_w, text_h), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-            # cv2.rectangle(vis_frame, (x1, y1 - 20), (x1 + text_w, y1), color, -1)
-            # cv2.putText(vis_frame, text, (x1, y1 - 5),
-            #             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            confidence = result['confidence']
+            text = f"ID:{track_id} S:{confidence:.2f}"
+            (text_w, text_h), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            cv2.rectangle(vis_frame, (x1, y1 - 20), (x1 + text_w, y1), color, -1)
+            cv2.putText(vis_frame, text, (x1, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
             confidence = result['confidence']
             text = f"ID:{track_id}"
@@ -1169,64 +1187,65 @@ class SAM2MOT:
                 alpha = 0.6
                 vis_frame = cv2.addWeighted(overlay, alpha, vis_frame, 1 - alpha, 0)
                     
-            # # =========================
-            # # Debug Info Panel (Top-Left)
-            # # =========================
-            # if frame_debug_info is not None:
-            #     panel_x, panel_y = 15, 60
-            #     line_h = 22
-            #     panel_w = 520
+            # =========================
+            # Debug Info Panel (Top-Left)
+            # =========================
+            if frame_debug_info is not None:
+                panel_x, panel_y = 15, 60
+                line_h = 22
+                panel_w = 520
 
-            #     lines = []
+                lines = []
 
-            #     if frame_debug_info["coi_ids"]:
-            #         lines.append(f"CoI IDs: {frame_debug_info['coi_ids']}")
+                if frame_debug_info["coi_ids"]:
+                    lines.append(f"CoI IDs: {frame_debug_info['coi_ids']}")
 
-            #     if frame_debug_info["dense_skip"]:
-            #         s = ", ".join([f"{tid}(d={d:.2f})" for tid, d in frame_debug_info["dense_skip"]])
-            #         lines.append(f"Dense Skip: {s}")
+                if frame_debug_info["dense_skip"]:
+                    s = ", ".join([f"{tid}(d={d:.2f})" for tid, d in frame_debug_info["dense_skip"]])
+                    lines.append(f"Dense Skip: {s}")
 
-            #     if frame_debug_info["frame_out_ids"]:
-            #         lines.append(f"Frame-Out IDs: {frame_debug_info['frame_out_ids']}")
-            #     if frame_debug_info["frame_out_recovered_ids"]:
-            #         lines.append(f"Frame-Out Recovered: {frame_debug_info['frame_out_recovered_ids']}")
-            #     if frame_debug_info["reconstructed_ids"]:
-            #         lines.append(f"Reconstructed IDs: {frame_debug_info['reconstructed_ids']}")
-            #     if frame_debug_info.get("coi_pairs"):
-            #         lines.append("CoI Pairs:")
-            #         for a, b, skipped in frame_debug_info["coi_pairs"]:
-            #             lines.append(f"  ({a} & {b}) => skip: {skipped}")
-            #     if frame_debug_info["second_stage_matched_ids"]:
-            #         lines.append(
-            #             f"2nd-Stage Matched IDs: "
-            #             f"{sorted(frame_debug_info['second_stage_matched_ids'])}"
-            #         )
+                if frame_debug_info["frame_out_ids"]:
+                    lines.append(f"Frame-Out IDs: {frame_debug_info['frame_out_ids']}")
+                if frame_debug_info["frame_out_recovered_ids"]:
+                    lines.append(f"Frame-Out Recovered: {frame_debug_info['frame_out_recovered_ids']}")
+                if frame_debug_info["reconstructed_ids"]:
+                    lines.append(f"Reconstructed IDs: {frame_debug_info['reconstructed_ids']}")
+                if frame_debug_info.get("coi_pairs"):
+                    lines.append("CoI Pairs:")
+                    for a, b, skipped in frame_debug_info["coi_pairs"]:
+                        lines.append(f"  ({a} & {b}) => skip: {skipped}")
+                if frame_debug_info["second_stage_matched_ids"]:
+                    lines.append(
+                        f"2nd-Stage Matched IDs: "
+                        f"{sorted(frame_debug_info['second_stage_matched_ids'])}"
+                    )
 
-            #     panel_h = line_h * len(lines) + 10
+                panel_h = line_h * len(lines) + 10
 
-            #     # background
-            #     cv2.rectangle(
-            #         vis_frame,
-            #         (panel_x - 5, panel_y - 20),
-            #         (panel_x + panel_w, panel_y + panel_h),
-            #         (0, 0, 0),
-            #         -1
-            #     )
+                # background
+                cv2.rectangle(
+                    vis_frame,
+                    (panel_x - 5, panel_y - 20),
+                    (panel_x + panel_w, panel_y + panel_h),
+                    (0, 0, 0),
+                    -1
+                )
 
-            #     for i, text in enumerate(lines):
-            #         y = panel_y + i * line_h
-            #         cv2.putText(
-            #             vis_frame,
-            #             text,
-            #             (panel_x, y),
-            #             cv2.FONT_HERSHEY_SIMPLEX,
-            #             0.55,
-            #             (0, 255, 255),
-            #             2
-            #         )
+                for i, text in enumerate(lines):
+                    y = panel_y + i * line_h
+                    cv2.putText(
+                        vis_frame,
+                        text,
+                        (panel_x, y),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.55,
+                        (0, 255, 255),
+                        2
+                    )
 
         return vis_frame
 
+    
 def demo_sam2mot_with_gt(args):
     """Demo with sequential processing"""
     video_path = args.video_path
@@ -1259,7 +1278,7 @@ def demo_sam2mot_with_gt(args):
         tau_p=args.tau_p,
         tau_s=args.tau_s,
         density_threshold=args.density_threshold,
-        second_stage_iou_threshold=args.second_stage_iou_threshold,  # 🆕
+        second_stage_iou_threshold=args.second_stage_iou_threshold,
         frame_out_d_thre=args.frame_out_d_thre
     )
     
@@ -1291,11 +1310,15 @@ def demo_sam2mot_with_gt(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu", type=int, default=0, help="GPU ID to use")
-    parser.add_argument("--data_path", type=str, 
-                        default="/home-local/zabu/det_val2/v_00HRwkvvjtQ_c005",
+    parser.add_argument("--video_path", type=str, 
+                        default="/home-local/zabu/det_val/v_00HRwkvvjtQ_c004",
                         help="Path to video directory (containing img1/ and gt/)")
     parser.add_argument("--output_video", type=str, default="tracking_output.mp4", help="Output video filename")
-    parser.add_argument("--output_dir", type=str, default="outputs", help="Output directory")
+    parser.add_argument("--output_dir", type=str, default="/home/zabu/masa/sam2/experiment/samidare/fixed", help="Output directory")
+    parser.add_argument("--sam2_checkpoint", type=str, default="./checkpoints/sam2.1_hiera_large.pt",
+                        help="Path to SAM2 checkpoint")
+    parser.add_argument("--model_cfg", type=str, default="configs/sam2.1/sam2.1_hiera_l.yaml",
+                        help="Path to SAM2 model config")
     parser.add_argument("--start_frame", type=int, default=1, help="Start frame number")
     parser.add_argument("--end_frame", type=int, default=-1, help="End frame number (-1 for all)")
     parser.add_argument("--tolerance_frames", type=int, default=60, help="SAM2 tracks lost objects for this frame number")
@@ -1304,9 +1327,9 @@ if __name__ == "__main__":
     parser.add_argument("--tau_r", type=float, default=8.0, help="Reliable threshold for track state (default: 8.0)")
     parser.add_argument("--tau_p", type=float, default=1.0, help="Pending threshold for track state (default: 1.0)")
     parser.add_argument("--tau_s", type=float, default=0.0, help="Suspicious threshold for track state (default: 0.0)")
-    parser.add_argument("--density_threshold", type=float, default=2.0, help="Density threshold above which reconstruction is skipped")
+    parser.add_argument("--density_threshold", type=float, default=0.9, help="Density threshold above which reconstruction is skipped")
     parser.add_argument("--second_stage_iou_threshold", type=float, default=0.0, 
-                        help="IoU threshold for 2nd stage matching with prev_bbox (default: 0.0)")  # 🆕
+                        help="IoU threshold for 2nd stage matching with prev_bbox (default: 0.0)")
     parser.add_argument("--frame_out_d_thre", type=float, default=0.6, help="Density threshold for clasiffication of dense trakck")
 
     args = parser.parse_args()
