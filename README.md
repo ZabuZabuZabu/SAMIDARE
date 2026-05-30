@@ -1,5 +1,8 @@
 # SAMIDARE: Advanced Tracking-by-Segmentation for Dense Scenarios
 
+> **This paper has been accepted at the CVPR Workshop 2026, CVsports!** 🎉  
+> 📄 **[Read the paper on arXiv](https://arxiv.org/abs/2604.22162)**
+
 ## 📝 Abstract
 Automated sports analysis demands robust multi-object tracking (MOT), yet segmentation-based methods often struggle with mask errors and ID switches in dense scenes. We propose SAMIDARE, a framework that enhances SAM2MOT for crowded scenes through three key components: (1) density-aware mask re-generation and (2) selective memory updates, both for adaptive mask control to preserve target feature integrity, and (3) state-aware association and new track initialization, which improves robustness under mutual occlusions and frequent frame-out events. Evaluated on the SportsMOT dataset, SAMIDARE achieves state-of-the-art performance, outperforming the baseline by 2.5 HOTA and 4.2 IDF1 points on the validation set. These results demonstrate that adaptive feature management using mask control and state-aware association provide a robust and efficient solution for dense sports tracking.
 
@@ -77,4 +80,16 @@ Run under code. If you run with your own data, please change --data_path
 ```bash
 cd sam2
 python samidare_for_vis.py --output_dir "path_to_your_output_directory" --data_path /detection/demo_data
+```
+
+
+## 📑 Citation
+If you find this work useful for your research, please cite our paper:
+```bash
+@inproceedings{samidare2025,
+  title={SAMIDARE: Advanced Tracking-by-Segmentation for Dense Scenarios},
+  author={Your Name and Co-authors},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops (CVSports)},
+  year={2025}
+}
 ```
