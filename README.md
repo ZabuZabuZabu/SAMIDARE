@@ -3,6 +3,10 @@
 > **This paper has been accepted at the CVPR Workshop 2026, CVsports!** 🎉  
 > 📄 **[Read the paper on arXiv](https://arxiv.org/abs/2604.22162)**
 
+https://github.com/user-attachments/assets/13b5a707-2eb3-457c-bbbd-68b53c5004a4
+
+<img width="1518" height="1178" alt="visualization_result" src="https://github.com/user-attachments/assets/b4d51074-201d-4f6e-8f37-84b43625eb59" />
+
 ## 📝 Abstract
 Automated sports analysis demands robust multi-object tracking (MOT), yet segmentation-based methods often struggle with mask errors and ID switches in dense scenes. We propose SAMIDARE, a framework that enhances SAM2MOT for crowded scenes through three key components: (1) density-aware mask re-generation and (2) selective memory updates, both for adaptive mask control to preserve target feature integrity, and (3) state-aware association and new track initialization, which improves robustness under mutual occlusions and frequent frame-out events. Evaluated on the SportsMOT dataset, SAMIDARE achieves state-of-the-art performance, outperforming the baseline by 2.5 HOTA and 4.2 IDF1 points on the validation set. These results demonstrate that adaptive feature management using mask control and state-aware association provide a robust and efficient solution for dense sports tracking.
 
