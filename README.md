@@ -86,10 +86,10 @@ python samidare_for_vis.py --output_dir "path_to_your_output_directory" --data_p
 ## 📑 Citation
 If you find this work useful for your research, please cite our paper:
 ```bash
-@inproceedings{samidare2025,
+@inproceedings{samidare2026,
   title={SAMIDARE: Advanced Tracking-by-Segmentation for Dense Scenarios},
-  author={Your Name and Co-authors},
+  author={Shozaburo Hirano, Norimichi Ukita},
   booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops (CVSports)},
-  year={2025}
+  year={2026}
 }
 ```
