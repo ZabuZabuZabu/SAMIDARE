@@ -97,3 +97,5 @@ If you find this work useful for your research, please cite our paper:
   year={2026}
 }
 ```
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
